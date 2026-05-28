@@ -27332,7 +27332,7 @@ a9d:function a9d(a,b){this.a=a
 this.b=b},
 he:function he(a,b){this.a=a
 this.b=b},
-eT(){var s,r=A.aRt("http://13.201.66.37:8082/api",B.pC,A.a5(["Content-Type","application/json"],t.N,t.z),B.pC),q=new A.NL(A.b([B.Fr],t.i6))
+eT(){var s,r=A.aRt("https://api.hisabapp.com/api",B.pC,A.a5(["Content-Type","application/json"],t.N,t.z),B.pC),q=new A.NL(A.b([B.Fr],t.i6))
 q.N(q,B.MW)
 s=new A.a59($,q,$,new A.a8N(51200),!1)
 s.Zn$=r
