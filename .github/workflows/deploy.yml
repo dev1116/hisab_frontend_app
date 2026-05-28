@@ -10,19 +10,22 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: subosito/flutter-action@v2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.44.0"
-          channel: 'stable'
+          channel: stable
 
       - name: Install dependencies
         run: flutter pub get
 
       - name: Build web
-        run: flutter build web --release --base-href /sharewave-frontend/
+        run: flutter build web --release --base-href /hisab_frontend_app/
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
