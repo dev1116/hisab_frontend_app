@@ -90,4 +90,15 @@ class QuotationService {
 
     return QuotationModel.fromJson(res.data);
   }
+
+  Future<List<QuotationModel>> getVersionHistory({
+    required int businessId,
+    required int quotationId,
+  }) async {
+    final res = await ApiClient.dio.get(
+      '/business/$businessId/quotations/$quotationId/history',
+    );
+    final List data = res.data['data'];
+    return data.map((e) => QuotationModel.fromJson(e)).toList();
+  }
 }

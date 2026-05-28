@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../model/business_model.dart';
 import '../../quotations/screens/quotations_screen.dart';
+import '../../invoice/screens/invoices_screen.dart';
 
 class BusinessHomeScreen extends StatelessWidget {
   final BusinessResponse business;
@@ -151,8 +152,14 @@ class BusinessHomeScreen extends StatelessWidget {
             title: 'Invoices',
             subtitle: 'Bills & payment records',
             color: AppColors.success,
-            onTap: () {},
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => InvoicesScreen(businessId: business.id),
+              ),
+            ),
           ),
+
           _ModuleTile(
             icon: Icons.payments_rounded,
             title: 'Payments',

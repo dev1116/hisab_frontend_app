@@ -5,6 +5,7 @@ import '../../../core/theme/app_theme.dart';
 import '../model/quotation_model.dart';
 import '../provider/quotation_service.dart';
 import 'create_quotation_screen.dart';
+import 'quotation_detail_screen.dart';
 
 class QuotationsScreen extends StatefulWidget {
   final int businessId;
@@ -22,6 +23,313 @@ class _QuotationsScreenState extends State<QuotationsScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  String _searchQuery = '';
+  String _selectedFilter = 'ALL';
+  String _searchField = 'title'; // default search field
+
+  // Search fields options
+  final List<Map<String, String>> _searchFields = [
+    {'value': 'title', 'label': 'Title'},
+    {'value': 'customerName', 'label': 'Customer'},
+    {'value': 'quoteNumber', 'label': 'Quote No'},
+    {'value': 'amount', 'label': 'Amount'},
+    {'value': 'date', 'label': 'Date'},
+  ];
+
+  // Filtered list
+  List<QuotationModel> get _filteredQuotes {
+    return _quotes.where((q) {
+      // Status filter
+      final matchesFilter =
+          _selectedFilter == 'ALL' || q.status == _selectedFilter;
+
+      // Search
+      final query = _searchQuery.toLowerCase().trim();
+      if (query.isEmpty) return matchesFilter;
+
+      bool matchesSearch = false;
+      switch (_searchField) {
+        case 'title':
+          matchesSearch = q.title.toLowerCase().contains(query);
+          break;
+        case 'customerName':
+          matchesSearch =
+              q.customerName?.toLowerCase().contains(query) ?? false;
+          break;
+        case 'quoteNumber':
+          matchesSearch = q.quoteNumber.toLowerCase().contains(query);
+          break;
+        case 'amount':
+          matchesSearch = q.totalAmount.toString().contains(query);
+          break;
+        case 'date':
+          matchesSearch =
+              q.issueDate.contains(query) ||
+              (q.validUntil?.contains(query) ?? false);
+          break;
+      }
+
+      return matchesFilter && matchesSearch;
+    }).toList();
+  }
+
+  Widget _searchAndFilter(bool isDark) {
+    final filters = ['ALL', 'DRAFT', 'SENT', 'ACCEPTED', 'REJECTED', 'REVISED'];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Search Row ─────────────────────────────────────
+        Row(
+          children: [
+            // Field selector dropdown
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.3),
+                ),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _searchField,
+                  isDense: true,
+                  style: const TextStyle(
+                    color: AppColors.primary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  dropdownColor: isDark
+                      ? AppColors.darkSurface
+                      : AppColors.lightSurface,
+                  icon: const Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    color: AppColors.primary,
+                    size: 16,
+                  ),
+                  items: _searchFields.map((f) {
+                    return DropdownMenuItem(
+                      value: f['value'],
+                      child: Text(f['label']!),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() {
+                        _searchField = val;
+                        _searchQuery = '';
+                      });
+                    }
+                  },
+                ),
+              ),
+            ),
+
+            const SizedBox(width: 10),
+
+            // Search input
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? AppColors.darkSurface
+                      : AppColors.lightSurface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: _searchQuery.isNotEmpty
+                        ? AppColors.primary
+                        : (isDark
+                              ? AppColors.darkBorder
+                              : AppColors.lightBorder),
+                  ),
+                ),
+                child: TextField(
+                  onChanged: (val) => setState(() => _searchQuery = val),
+                  keyboardType:
+                      _searchField == 'amount' || _searchField == 'date'
+                      ? TextInputType.number
+                      : TextInputType.text,
+                  style: TextStyle(
+                    color: isDark ? AppColors.textPrimary : AppColors.textDark,
+                    fontSize: 13,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: _getHint(),
+                    hintStyle: const TextStyle(
+                      color: AppColors.textHint,
+                      fontSize: 12,
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.search_rounded,
+                      color: AppColors.textHint,
+                      size: 18,
+                    ),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              color: AppColors.textHint,
+                              size: 16,
+                            ),
+                            onPressed: () => setState(() => _searchQuery = ''),
+                          )
+                        : null,
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 12),
+
+        // ── Filter Chips ────────────────────────────────────
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: filters.map((f) {
+              final isSelected = _selectedFilter == f;
+              final color = _getFilterColor(f);
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: () => setState(() => _selectedFilter = f),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? color.withValues(alpha: 0.12)
+                            : (isDark
+                                  ? AppColors.darkSurface
+                                  : AppColors.lightSurface),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isSelected
+                              ? color
+                              : (isDark
+                                    ? AppColors.darkBorder
+                                    : AppColors.lightBorder),
+                          width: isSelected ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          if (isSelected) ...[
+                            Icon(Icons.check_rounded, size: 12, color: color),
+                            const SizedBox(width: 4),
+                          ],
+                          Text(
+                            f,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: isSelected
+                                  ? color
+                                  : AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+
+        // ── Active search indicator ─────────────────────────
+        if (_searchQuery.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Icon(
+                Icons.info_outline_rounded,
+                size: 12,
+                color: AppColors.textSecondary,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Searching "${_searchQuery}" in ${_searchFields.firstWhere((f) => f['value'] == _searchField)['label']}',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  onTap: () => setState(() {
+                    _searchQuery = '';
+                    _selectedFilter = 'ALL';
+                  }),
+                  child: const Text(
+                    'Clear all',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  String _getHint() {
+    switch (_searchField) {
+      case 'title':
+        return 'e.g. Cement supply...';
+      case 'customerName':
+        return 'e.g. Rahul Sharma...';
+      case 'quoteNumber':
+        return 'e.g. QT-2026-0001';
+      case 'amount':
+        return 'e.g. 50000';
+      case 'date':
+        return 'e.g. 2026-05';
+      default:
+        return 'Search...';
+    }
+  }
+
+  Color _getFilterColor(String filter) {
+    switch (filter) {
+      case 'DRAFT':
+        return AppColors.textSecondary;
+      case 'SENT':
+        return AppColors.info;
+      case 'ACCEPTED':
+        return AppColors.success;
+      case 'REJECTED':
+        return AppColors.error;
+      case 'REVISED':
+        return AppColors.accent;
+      default:
+        return AppColors.primary;
+    }
   }
 
   Future<void> _load() async {
@@ -135,12 +443,14 @@ class _QuotationsScreenState extends State<QuotationsScreen> {
                   _statsRow(isDark),
                   const SizedBox(height: 20),
 
+                  _searchAndFilter(isDark),
+                  const SizedBox(height: 20),
                   // ── Section Label ──────────────────────
                   _sectionLabel('All Quotations'),
                   const SizedBox(height: 12),
 
                   // ── Quotation Cards ────────────────────
-                  ..._quotes.map(
+                  ..._filteredQuotes.map(
                     (q) => Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: Dismissible(
@@ -219,49 +529,69 @@ class _QuotationsScreenState extends State<QuotationsScreen> {
                             ],
                           ),
                         ),
-                        child: _QuotationTile(
-                          quote: q,
-                          isDark: isDark,
-                          onPdfTap: q.pdfUrl != null && q.pdfUrl!.isNotEmpty
-                              ? () => _openPdf(q.pdfUrl!)
-                              : null,
-                          onEdit: () async {
-                            final result = await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => EditQuotationScreen(
-                                  businessId: widget.businessId,
-                                  quotation: q,
+
+                        // _QuotationTile ko GestureDetector mein wrap karo
+                        // quotations_screen.dart mein Dismissible ke child mein:
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: GestureDetector(
+                            onTap: () async {
+                              final result = await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => QuotationDetailScreen(
+                                    businessId: widget.businessId,
+                                    quotation: q,
+                                  ),
                                 ),
-                              ),
-                            );
-                            if (result == true) _load();
-                          },
-                          onStatusUpdate: (status) async {
-                            try {
-                              final service = QuotationService();
-                              await service.updateStatus(
-                                businessId: widget.businessId,
-                                quotationId: q.id,
-                                status: status,
                               );
-                              _load();
-                            } catch (e) {
-                              _showSnack('Update failed', isError: true);
-                            }
-                          },
-                          onDelete: () async {
-                            try {
-                              final service = QuotationService();
-                              await service.deleteQuotation(
-                                businessId: widget.businessId,
-                                quotationId: q.id,
-                              );
-                              _load();
-                            } catch (e) {
-                              _showSnack('Delete failed', isError: true);
-                            }
-                          },
+                              if (result == true) _load();
+                            },
+                            child: _QuotationTile(
+                              quote: q,
+                              isDark: isDark,
+                              onPdfTap: q.pdfUrl != null && q.pdfUrl!.isNotEmpty
+                                  ? () => _openPdf(q.pdfUrl!)
+                                  : null,
+                              onEdit: () async {
+                                final result = await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => EditQuotationScreen(
+                                      businessId: widget.businessId,
+                                      quotation: q,
+                                    ),
+                                  ),
+                                );
+                                if (result == true) _load();
+                              },
+                              onStatusUpdate: (status) async {
+                                try {
+                                  final service = QuotationService();
+                                  await service.updateStatus(
+                                    businessId: widget.businessId,
+                                    quotationId: q.id,
+                                    status: status,
+                                  );
+                                  _load();
+                                } catch (e) {
+                                  _showSnack('Update failed', isError: true);
+                                }
+                              },
+                              onDelete: () async {
+                                try {
+                                  final service = QuotationService();
+                                  await service.deleteQuotation(
+                                    businessId: widget.businessId,
+                                    quotationId: q.id,
+                                  );
+                                  _load();
+                                } catch (e) {
+                                  _showSnack('Delete failed', isError: true);
+                                }
+                              },
+                            ),
+                          ),
                         ),
                       ),
                     ),

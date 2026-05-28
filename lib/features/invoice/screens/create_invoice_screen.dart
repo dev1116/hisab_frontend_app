@@ -2,73 +2,51 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:hisab_app/core/network/api_client.dart';
 import 'package:hisab_app/core/theme/app_theme.dart';
-import 'package:hisab_app/features/quotations/model/quotation_model.dart';
-import 'package:hisab_app/features/quotations/provider/quotation_service.dart';
+import 'package:hisab_app/features/invoice/provider/invoice_service.dart';
 import 'dart:typed_data';
 
-class EditQuotationScreen extends StatefulWidget {
+class CreateInvoiceScreen extends StatefulWidget {
   final int businessId;
-  final QuotationModel quotation;
-
-  const EditQuotationScreen({
-    super.key,
-    required this.businessId,
-    required this.quotation,
-  });
+  const CreateInvoiceScreen({super.key, required this.businessId});
 
   @override
-  State<EditQuotationScreen> createState() => _EditQuotationScreenState();
+  State<CreateInvoiceScreen> createState() => _CreateInvoiceScreenState();
 }
 
-class _EditQuotationScreenState extends State<EditQuotationScreen> {
+class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _title;
-  late final TextEditingController _desc;
-  late final TextEditingController _amount;
-  late final TextEditingController _tax;
-  late final TextEditingController _total;
-  late final TextEditingController _notes;
-  late final TextEditingController _customerName;
-  late final TextEditingController _address1;
-  late final TextEditingController _address2;
-  late final TextEditingController _pincode;
-  late final TextEditingController _city;
-  late final TextEditingController _state;
-  late final TextEditingController _country;
+  final _title = TextEditingController();
+  final _desc = TextEditingController();
+  final _amount = TextEditingController();
+  final _tax = TextEditingController();
+  final _total = TextEditingController();
+  final _notes = TextEditingController();
+  final _customerName = TextEditingController();
+  final _billNumber = TextEditingController();
+  final _address1 = TextEditingController();
+  final _address2 = TextEditingController();
+  final _pincode = TextEditingController();
+  final _city = TextEditingController();
+  final _state = TextEditingController();
+  final _country = TextEditingController(text: 'India');
+  final _paidAmount = TextEditingController(text: '0');
 
   Uint8List? _pdfBytes;
   String? _pdfName;
-  DateTime? _validUntil;
+  DateTime? _dueDate;
+  DateTime? _billDate;
   bool _saving = false;
   bool _fetchingPincode = false;
 
   @override
   void initState() {
     super.initState();
-    // Pre-fill existing data
-    final q = widget.quotation;
-    _title = TextEditingController(text: q.title);
-    _desc = TextEditingController(text: q.description ?? '');
-    _amount = TextEditingController(text: q.amount.toString());
-    _tax = TextEditingController(text: q.taxAmount?.toString() ?? '');
-    _total = TextEditingController(text: q.totalAmount.toString());
-    _notes = TextEditingController(text: q.notes ?? '');
-    _customerName = TextEditingController(text: q.customerName ?? '');
-    _address1 = TextEditingController(text: q.addressLine1 ?? '');
-    _address2 = TextEditingController(text: q.addressLine2 ?? '');
-    _pincode = TextEditingController(text: q.pincode ?? '');
-    _city = TextEditingController(text: q.city ?? '');
-    _state = TextEditingController(text: q.state ?? '');
-    _country = TextEditingController(text: q.country ?? 'India');
-
-    if (q.validUntil != null) {
-      _validUntil = DateTime.tryParse(q.validUntil!);
-    }
-
     _amount.addListener(_calcTotal);
     _tax.addListener(_calcTotal);
     _pincode.addListener(() {
-      if (_pincode.text.length == 6) _fetchPincodeDetails(_pincode.text);
+      if (_pincode.text.length == 6) {
+        _fetchPincodeDetails(_pincode.text);
+      }
     });
   }
 
@@ -81,22 +59,21 @@ class _EditQuotationScreenState extends State<EditQuotationScreen> {
     _total.dispose();
     _notes.dispose();
     _customerName.dispose();
+    _billNumber.dispose();
     _address1.dispose();
     _address2.dispose();
     _pincode.dispose();
     _city.dispose();
     _state.dispose();
     _country.dispose();
+    _paidAmount.dispose();
     super.dispose();
   }
 
   void _calcTotal() {
-    final amount = double.tryParse(_amount.text) ?? 0;
-    final taxPercent = double.tryParse(_tax.text) ?? 0;
-
-    final total = amount + (amount * taxPercent / 100);
-
-    _total.text = total.toStringAsFixed(2);
+    final a = double.tryParse(_amount.text) ?? 0;
+    final t = double.tryParse(_tax.text) ?? 0;
+    _total.text = (a + t).toStringAsFixed(2);
   }
 
   Future<void> _pickPDF() async {
@@ -116,13 +93,13 @@ class _EditQuotationScreenState extends State<EditQuotationScreen> {
   Future<void> _fetchPincodeDetails(String pincode) async {
     setState(() => _fetchingPincode = true);
     try {
-      final response = await ApiClient.dio.get('/utils/pincode/$pincode');
+      final res = await ApiClient.dio.get('/utils/pincode/$pincode');
       if (!mounted) return;
       setState(() {
-        _city.text = response.data['city'] ?? '';
-        _state.text = response.data['state'] ?? '';
+        _city.text = res.data['city'] ?? '';
+        _state.text = res.data['state'] ?? '';
       });
-    } catch (e) {
+    } catch (_) {
       if (mounted) _showSnack('Invalid pincode', isError: true);
     } finally {
       if (mounted) setState(() => _fetchingPincode = false);
@@ -132,40 +109,40 @@ class _EditQuotationScreenState extends State<EditQuotationScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
-
     try {
-      final service = QuotationService();
-      await service.reviseQuotation(
+      final service = InvoiceService();
+      await service.createInvoice(
         businessId: widget.businessId,
-        quotationId: widget.quotation.id,
         data: {
           'customerName': _customerName.text.isEmpty
               ? null
               : _customerName.text,
+          'billNumber': _billNumber.text.isEmpty ? null : _billNumber.text,
+          'billDate': _billDate?.toIso8601String().split('T').first,
           'title': _title.text,
           'description': _desc.text.isEmpty ? null : _desc.text,
           'amount': double.parse(_amount.text),
           'taxAmount': double.tryParse(_tax.text),
           'totalAmount': double.parse(_total.text),
-          'validUntil': _validUntil?.toIso8601String().split('T').first,
-          'notes': _notes.text.isEmpty ? null : _notes.text,
+          'paidAmount': double.tryParse(_paidAmount.text) ?? 0,
+          'dueDate': _dueDate?.toIso8601String().split('T').first,
           'addressLine1': _address1.text.isEmpty ? null : _address1.text,
           'addressLine2': _address2.text.isEmpty ? null : _address2.text,
           'pincode': _pincode.text.isEmpty ? null : _pincode.text,
           'city': _city.text.isEmpty ? null : _city.text,
           'state': _state.text.isEmpty ? null : _state.text,
           'country': _country.text.isEmpty ? null : _country.text,
+          'notes': _notes.text.isEmpty ? null : _notes.text,
         },
         pdfBytes: _pdfBytes,
         pdfName: _pdfName,
       );
-
       if (!mounted) return;
-      _showSnack('Quotation revised — new version created!');
-      Navigator.pop(context, true); // true = refresh list
+      _showSnack('Invoice created successfully!');
+      Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-      _showSnack('Error: ${e.toString()}', isError: true);
+      _showSnack(e.toString().replaceAll('Exception: ', ''), isError: true);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -212,63 +189,69 @@ class _EditQuotationScreenState extends State<EditQuotationScreen> {
           icon: const Icon(Icons.arrow_back_ios_rounded, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Revise Quotation',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: isDark ? AppColors.textPrimary : AppColors.textDark,
-              ),
-            ),
-            Text(
-              '${widget.quotation.quoteNumber} → v${widget.quotation.version + 1}',
-              style: const TextStyle(
-                fontSize: 11,
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ],
+        title: Text(
+          'New Invoice',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: isDark ? AppColors.textPrimary : AppColors.textDark,
+          ),
         ),
       ),
       body: Form(
         key: _formKey,
         child: Column(
           children: [
-            // Version info banner
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              color: AppColors.warning.withValues(alpha: 0.1),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.info_outline_rounded,
-                    size: 16,
-                    color: AppColors.warning,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Current version v${widget.quotation.version} will be archived. A new version will be created.',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.warning,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Form
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
-                  // ── Customer Details ─────────────────────
+                  // ── Bill Info ──────────────────────────
+                  _sectionLabel('Bill Information'),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _field(
+                          _billNumber,
+                          'Bill Number (16 digits)',
+                          icon: Icons.tag_rounded,
+                          keyboardType: TextInputType.number,
+                          maxLength: 16,
+                          validator: (v) {
+                            if (v != null && v.isNotEmpty && v.length != 16) {
+                              return 'Must be 16 digits';
+                            }
+                            return null;
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _datePicker(
+                          label: 'Bill Date',
+                          date: _billDate,
+                          icon: Icons.receipt_outlined,
+                          isDark: isDark,
+                          onTap: () async {
+                            final d = await showDatePicker(
+                              context: context,
+                              initialDate: DateTime.now(),
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime(2030),
+                            );
+                            if (d != null) {
+                              setState(() => _billDate = d);
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // ── Customer Details ───────────────────
                   _sectionLabel('Customer Details'),
                   const SizedBox(height: 10),
                   _field(
@@ -321,21 +304,21 @@ class _EditQuotationScreenState extends State<EditQuotationScreen> {
 
                   const SizedBox(height: 24),
 
-                  // ── Quotation Details ────────────────────
-                  _sectionLabel('Quotation Details'),
+                  // ── Invoice Details ────────────────────
+                  _sectionLabel('Invoice Details'),
                   const SizedBox(height: 10),
                   _field(
                     _title,
                     'Title *',
                     icon: Icons.title,
-                    validator: (v) => v!.isEmpty ? 'Title is required' : null,
+                    validator: (v) => v!.isEmpty ? 'Title required' : null,
                   ),
                   const SizedBox(height: 12),
                   _field(_desc, 'Description', icon: Icons.notes, maxLines: 3),
 
                   const SizedBox(height: 24),
 
-                  // ── Pricing ──────────────────────────────
+                  // ── Pricing ────────────────────────────
                   _sectionLabel('Pricing'),
                   const SizedBox(height: 10),
                   Row(
@@ -405,65 +388,39 @@ class _EditQuotationScreenState extends State<EditQuotationScreen> {
                       ],
                     ),
                   ),
+                  const SizedBox(height: 12),
+
+                  // Paid Amount
+                  _field(
+                    _paidAmount,
+                    'Paid Amount (if any)',
+                    icon: Icons.payments_outlined,
+                    keyboardType: TextInputType.number,
+                  ),
 
                   const SizedBox(height: 24),
 
-                  // ── Additional Info ──────────────────────
+                  // ── Additional Info ────────────────────
                   _sectionLabel('Additional Info'),
                   const SizedBox(height: 10),
 
-                  // Valid Until
-                  GestureDetector(
+                  // Due Date
+                  _datePicker(
+                    label: 'Due Date',
+                    date: _dueDate,
+                    icon: Icons.event_outlined,
+                    isDark: isDark,
                     onTap: () async {
                       final d = await showDatePicker(
                         context: context,
-                        initialDate:
-                            _validUntil ??
-                            DateTime.now().add(const Duration(days: 30)),
+                        initialDate: DateTime.now().add(
+                          const Duration(days: 30),
+                        ),
                         firstDate: DateTime.now(),
                         lastDate: DateTime.now().add(const Duration(days: 365)),
                       );
-                      if (d != null) setState(() => _validUntil = d);
+                      if (d != null) setState(() => _dueDate = d);
                     },
-                    child: Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? AppColors.darkSurface
-                            : AppColors.lightSurface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: _validUntil != null
-                              ? AppColors.primary
-                              : (isDark
-                                    ? AppColors.darkBorder
-                                    : AppColors.lightBorder),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.calendar_today,
-                            color: _validUntil != null
-                                ? AppColors.primary
-                                : AppColors.textHint,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            _validUntil == null
-                                ? 'Valid Until (optional)'
-                                : 'Valid Until: ${_validUntil!.toIso8601String().split('T').first}',
-                            style: TextStyle(
-                              color: _validUntil == null
-                                  ? AppColors.textHint
-                                  : AppColors.primary,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                   ),
                   const SizedBox(height: 12),
                   _field(
@@ -474,97 +431,81 @@ class _EditQuotationScreenState extends State<EditQuotationScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // PDF — show existing + option to replace
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? AppColors.darkSurface
-                          : AppColors.lightSurface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: _pdfBytes != null
-                            ? AppColors.success
-                            : (isDark
-                                  ? AppColors.darkBorder
-                                  : AppColors.lightBorder),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Existing PDF info
-                        if (widget.quotation.pdfUrl != null &&
-                            _pdfBytes == null)
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.picture_as_pdf_rounded,
-                                size: 16,
-                                color: AppColors.error,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  widget.quotation.pdfOriginalName ??
-                                      'Current PDF',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              const Text(
-                                'Existing',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: AppColors.textHint,
-                                ),
-                              ),
-                            ],
-                          ),
-
-                        if (widget.quotation.pdfUrl != null &&
-                            _pdfBytes == null)
-                          const SizedBox(height: 8),
-
-                        // Replace button
-                        MouseRegion(
-                          cursor: SystemMouseCursors.click,
-                          child: GestureDetector(
-                            onTap: _pickPDF,
-                            child: Row(
-                              children: [
-                                Icon(
-                                  _pdfBytes != null
-                                      ? Icons.check_circle_rounded
-                                      : Icons.upload_file_rounded,
-                                  size: 16,
-                                  color: _pdfBytes != null
-                                      ? AppColors.success
-                                      : AppColors.primary,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  _pdfBytes != null
-                                      ? _pdfName!
-                                      : widget.quotation.pdfUrl != null
-                                      ? 'Replace PDF'
-                                      : 'Upload PDF (optional)',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: _pdfBytes != null
-                                        ? AppColors.success
-                                        : AppColors.primary,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
+                  // PDF Upload
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: _pickPDF,
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? AppColors.darkSurface
+                              : AppColors.lightSurface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _pdfBytes != null
+                                ? AppColors.success
+                                : (isDark
+                                      ? AppColors.darkBorder
+                                      : AppColors.lightBorder),
                           ),
                         ),
-                      ],
+                        child: Row(
+                          children: [
+                            Icon(
+                              _pdfBytes != null
+                                  ? Icons.picture_as_pdf_rounded
+                                  : Icons.upload_file_rounded,
+                              color: _pdfBytes != null
+                                  ? AppColors.success
+                                  : AppColors.textHint,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _pdfBytes != null
+                                        ? 'PDF Attached'
+                                        : 'Attach PDF (optional)',
+                                    style: TextStyle(
+                                      color: _pdfBytes != null
+                                          ? AppColors.success
+                                          : AppColors.textSecondary,
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  if (_pdfName != null)
+                                    Text(
+                                      _pdfName!,
+                                      style: const TextStyle(
+                                        color: AppColors.textHint,
+                                        fontSize: 11,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                ],
+                              ),
+                            ),
+                            if (_pdfBytes != null)
+                              GestureDetector(
+                                onTap: () => setState(() {
+                                  _pdfBytes = null;
+                                  _pdfName = null;
+                                }),
+                                child: const Icon(
+                                  Icons.close_rounded,
+                                  color: AppColors.textHint,
+                                  size: 16,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
 
@@ -573,7 +514,7 @@ class _EditQuotationScreenState extends State<EditQuotationScreen> {
               ),
             ),
 
-            // ── Bottom Submit Button ──────────────────────
+            // ── Bottom Button ──────────────────────────
             Container(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
               decoration: BoxDecoration(
@@ -600,7 +541,7 @@ class _EditQuotationScreenState extends State<EditQuotationScreen> {
                             strokeWidth: 2,
                           ),
                         )
-                      : const Text('Save Revision'),
+                      : const Text('Create Invoice'),
                 ),
               ),
             ),
@@ -632,6 +573,57 @@ class _EditQuotationScreenState extends State<EditQuotationScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _datePicker({
+    required String label,
+    required DateTime? date,
+    required IconData icon,
+    required bool isDark,
+    required VoidCallback onTap,
+  }) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: date != null
+                  ? AppColors.primary
+                  : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                color: date != null ? AppColors.primary : AppColors.textHint,
+                size: 16,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  date == null
+                      ? label
+                      : date.toIso8601String().split('T').first,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: date != null
+                        ? AppColors.primary
+                        : AppColors.textHint,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -689,6 +681,7 @@ class _EditQuotationScreenState extends State<EditQuotationScreen> {
     String label, {
     IconData? icon,
     int maxLines = 1,
+    int? maxLength,
     bool readOnly = false,
     TextInputType? keyboardType,
     String? Function(String?)? validator,
@@ -697,6 +690,7 @@ class _EditQuotationScreenState extends State<EditQuotationScreen> {
     return TextFormField(
       controller: c,
       maxLines: maxLines,
+      maxLength: maxLength,
       readOnly: readOnly,
       keyboardType: keyboardType,
       validator: validator,
@@ -706,6 +700,7 @@ class _EditQuotationScreenState extends State<EditQuotationScreen> {
       decoration: InputDecoration(
         labelText: label,
         labelStyle: TextStyle(color: AppColors.textHint),
+        counterText: maxLength != null ? '' : null,
         prefixIcon: icon != null
             ? Icon(icon, color: AppColors.textHint, size: 18)
             : null,
@@ -726,6 +721,10 @@ class _EditQuotationScreenState extends State<EditQuotationScreen> {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.error),
         ),
       ),
     );

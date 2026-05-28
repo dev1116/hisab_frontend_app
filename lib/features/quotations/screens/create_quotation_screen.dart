@@ -64,9 +64,12 @@ class _CreateQuotationScreenState extends State<CreateQuotationScreen> {
   }
 
   void _calcTotal() {
-    final a = double.tryParse(_amount.text) ?? 0;
-    final t = double.tryParse(_tax.text) ?? 0;
-    _total.text = (a + t).toStringAsFixed(2);
+    final amount = double.tryParse(_amount.text) ?? 0;
+    final taxPercent = double.tryParse(_tax.text) ?? 0;
+
+    final total = amount + (amount * taxPercent / 100);
+
+    _total.text = total.toStringAsFixed(2);
   }
 
   Future<void> _pickPDF() async {
