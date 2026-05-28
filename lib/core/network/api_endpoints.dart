@@ -29,7 +29,7 @@ class ApiEndpoints {
   static String pincode(String pin) => '/utils/pincode/$pin';
 
   // Base URL for files
-  static const String baseUrl = 'http://13.201.66.37:8082';
+  static const String baseUrl = 'https://api.hisabapp.com';
   // static const String baseUrl =
   // "https://wisconsin-noted-represented-merge.trycloudflare.com/";
   static String fileUrl(String path) => '$baseUrl$path';
